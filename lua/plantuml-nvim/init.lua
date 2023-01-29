@@ -82,11 +82,15 @@ M.preview_buffer = function(bufnr)
     local url = get_diagram_url(vim.api.nvim_buf_get_name(bufnr), fmt.ascii)
     local res = curl.get(url)
     if res then
-        vim.api.nvim_command('vsplit')
+        vim.api.nvim_command('botright vsplit')
         local win = vim.api.nvim_get_current_win()
-        local buf = vim.api.nvim_create_buf(true, true)
-        vim.api.nvim_win_set_buf(win, buf)
+        local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(res.body, "\n"))
+        vim.api.nvim_buf_set_option(buf, "readonly", true)
+        vim.api.nvim_buf_set_keymap(buf, 'n', 'i', '<NOP>', { noremap = true, silent = true })
+        vim.api.nvim_buf_set_keymap(buf, 'n', 'q', '<CMD>bwipeout<CR>', { noremap = true, silent = true })
+
+        vim.api.nvim_win_set_buf(win, buf)
     end
 end
 
