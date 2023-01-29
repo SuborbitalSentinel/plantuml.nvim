@@ -1,11 +1,26 @@
 local M = {}
 
+local curl = require("plenary.curl")
+local J = require("plenary.job")
+local P = require("plenary.path")
+
+local fmt = {
+    svg = 0,
+    ascii = 1
+}
+
+local format_url = {
+    [fmt.svg] = function(url)
+        return url:gsub("/uml/", "/svg/")
+    end,
+    [fmt.ascii] = function(url)
+        return url:gsub("/uml/", "/txt/")
+    end
+}
+
 local settings = {
     server_url = 'http://localhost:8080/form'
 }
-
-local J = require("plenary.job")
-local P = require "plenary.path"
 
 local gen_dump_path = function()
     local path
@@ -21,14 +36,9 @@ local gen_dump_path = function()
     return path
 end
 
-M.setup = function(opts)
-    settings.server_url = opts.server_url or settings.server_url
-end
-
-M.call_server = function()
+local get_diagram_url = function(file_path, format)
     local response = {}
 
-    local file_path = "test.md"
     local dump_path = gen_dump_path()
     local job = J:new {
         command = "curl",
@@ -42,33 +52,42 @@ M.call_server = function()
         on_exit = function(j, code)
             if code ~= 0 then
                 print(vim.inspect(j:stderr_result()))
+            else
+                local headers = P.readlines(dump_path)
+                local status = tonumber(string.match(headers[1], "([%w+]%d+)"))
+
+                vim.loop.fs_unlink(dump_path)
+                table.remove(headers, 1)
+
+                response = {
+                    status = status,
+                    headers = headers,
+                    exit = code,
+                }
             end
-
-            local headers = P.readlines(dump_path)
-            local status = tonumber(string.match(headers[1], "([%w+]%d+)"))
-
-            vim.loop.fs_unlink(dump_path)
-            table.remove(headers, 1)
-
-            response = {
-                status = status,
-                headers = headers,
-                exit = code,
-            }
         end
     }
 
     job:sync(2000)
-    print(vim.inspect(response.headers[1]))
+
+    local uml_url = vim.split(response.headers[1], " ")[2]
+    return format_url[format](uml_url)
 end
 
-M.update_buffer = function()
+M.setup = function(opts)
+    settings.server_url = opts.server_url or settings.server_url
 end
 
 M.preview_buffer = function(bufnr)
-end
-
-M.stop_preview_buffer = function(bufnr)
+    local url = get_diagram_url(vim.api.nvim_buf_get_name(bufnr), fmt.ascii)
+    local res = curl.get(url)
+    if res then
+        vim.api.nvim_command('vsplit')
+        local win = vim.api.nvim_get_current_win()
+        local buf = vim.api.nvim_create_buf(true, true)
+        vim.api.nvim_win_set_buf(win, buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(res.body, "\n"))
+    end
 end
 
 return M
