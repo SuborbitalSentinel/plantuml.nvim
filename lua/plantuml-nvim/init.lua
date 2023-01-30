@@ -80,7 +80,9 @@ end
 
 M.preview_buffer = function(bufnr)
     local url = get_diagram_url(vim.api.nvim_buf_get_name(bufnr), fmt.ascii)
-    local res = curl.get(url)
+    local res = curl.get(url, {
+        compressed = false
+    })
     if res then
         vim.api.nvim_command('botright vsplit')
         local win = vim.api.nvim_get_current_win()
